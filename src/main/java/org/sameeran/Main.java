@@ -13,18 +13,31 @@ import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 public class Main {
+
+    private static class Stats {
+        float min;
+        double avg;
+        float max;
+        int count;
+        Stats(float min, double avg, float max, int count) {
+            this.min = min;
+            this.max = max;
+            this.avg = avg;
+            this.count = count;
+        }
+    }
+
     public static void main(String[] args) {
         long start = System.currentTimeMillis();
 
-        var map = new ConcurrentHashMap<String, double[]>();
+        var map = new ConcurrentHashMap<String, Stats>();
 
-        BiFunction<double[], double[], double[]> fn = (y, x) -> {
-            y[0] = Math.min(y[0], x[0]);
-            y[1] = Math.max(y[1], x[1]);
-            y[2] = x[2] + y[2];
-            y[3] = x[3] + y[3];
-            x = null;
-            return y;
+        BiFunction<Stats,Stats,Stats> statsFn = (x,y) -> {
+            x.min = Math.min(x.min, y.min);
+            x.max = Math.max(x.max, y.max);
+            x.avg = x.avg + y.avg;
+            x.count = x.count + y.count;
+            return x;
         };
 
         int nrec = 0;
@@ -33,7 +46,7 @@ public class Main {
 
             for (var line = reader.readLine(); line != null; line = reader.readLine()) {
                 String finalLine = line;
-                pool.submit(() -> update_stat_map(finalLine, map, fn));
+                pool.submit(() -> update_stat_map(finalLine, map, statsFn));
             }
         } catch (Exception e) {
             System.out.println(Arrays.stream(e.getStackTrace()).sequential());
@@ -45,11 +58,11 @@ public class Main {
 
         var ans = map.entrySet().stream()
             .map(e -> new SimpleImmutableEntry<>(e.getKey(),
-                    BigDecimal.valueOf(e.getValue()[0]).setScale(1, RoundingMode.HALF_UP).toPlainString()
+                    BigDecimal.valueOf(e.getValue().min).setScale(1, RoundingMode.HALF_UP).toPlainString()
                             .concat("/")
-                            .concat(BigDecimal.valueOf(e.getValue()[1]).setScale(1, RoundingMode.HALF_UP).toPlainString())
+                            .concat(BigDecimal.valueOf(e.getValue().max).setScale(1, RoundingMode.HALF_UP).toPlainString())
                             .concat("/")
-                            .concat(BigDecimal.valueOf(e.getValue()[2]/e.getValue()[3])
+                            .concat(BigDecimal.valueOf(e.getValue().avg/e.getValue().count)
                                     .setScale(1, RoundingMode.HALF_UP).toPlainString())))
                 .sorted(Map.Entry.comparingByKey())
                 .collect(Collectors.toList());
@@ -61,12 +74,12 @@ public class Main {
     }
 
     private static void update_stat_map(String line,
-                                        ConcurrentHashMap<String, double[]> map, BiFunction<double[], double[], double[]> fn) {
+                                        ConcurrentHashMap<String, Stats> map, BiFunction<Stats, Stats, Stats> fn) {
         var lineArr = splitString(line);
         var k = lineArr[0];
         var v = Float.parseFloat(lineArr[1]);
 
-        map.merge(k, new double[]{v,v,v,1}, fn);
+        map.merge(k, new Stats(v,v,v,1), fn);
     }
 
     private static String[] splitString(String str) {
