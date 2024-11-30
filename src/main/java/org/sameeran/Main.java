@@ -8,6 +8,7 @@ import static java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
@@ -40,16 +41,27 @@ public class Main {
         };
 
         int nrec = 0;
+        int batchSize = 1000;
+        var pool = Executors.newWorkStealingPool();
         try(var reader = new BufferedReader(new FileReader("src/main/resources/measurements_100M.txt"))) {
 
             for (var line = reader.readLine(); line != null; line = reader.readLine()) {
-                String finalLine = line;
-                update_stat_map(finalLine, map, statsFn);
+                // reading a few lines in a batch and parallelizing that batch
+                // increased perfomance significantly from ~15s to ~8s
+                var stringArr = new String[batchSize];
+                stringArr[0] = line;
+                for(int i = 1; i < batchSize; i++) {
+                    String s = reader.readLine();
+                    if(s == null) { break; }
+                    stringArr[i] = s;
+                }
+                pool.submit(() -> update_stat_map(stringArr, map, statsFn));
             }
         } catch (Exception e) {
             System.out.println(Arrays.stream(e.getStackTrace()).sequential());
         }
 
+        pool.close();
         var mid = System.currentTimeMillis();
 
         var ans = map.entrySet().stream()
@@ -69,12 +81,15 @@ public class Main {
         System.out.println(ans);
     }
 
-    private static void update_stat_map(String line, Map<String, Stats> map, BiFunction<Stats, Stats, Stats> fn) {
-        var lineArr = splitString(line);
-        var k = lineArr[0];
-        var v = parseTemp(lineArr[1]);
+    private static void update_stat_map(String[] line, Map<String, Stats> map, BiFunction<Stats, Stats, Stats> fn) {
+        for (int i = 0; i < line.length; i++) {
+            if(line[i] == null) break;
+            var lineArr = splitString(line[i]);
+            var k = lineArr[0];
+            var v = parseTemp(lineArr[1]);
 
-        map.merge(k, new Stats(v,v,v,1), fn);
+            map.merge(k, new Stats(v,v,v,1), fn);
+        }
     }
 
     // this (using int instead of float) adds a small performance gain over using floats
