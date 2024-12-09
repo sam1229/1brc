@@ -6,8 +6,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import static java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -28,9 +29,15 @@ public class Main {
     }
 
     public static void main(String[] args) {
+
+        if(args == null || args.length == 0 || Objects.equals(args[0], "")) {
+            System.out.println("Give a file input");
+            System.exit(1);
+        }
+
         long start = System.currentTimeMillis();
 
-        var map = new HashMap<String, Stats>();
+        var map = new ConcurrentHashMap<String, Stats>();
 
         BiFunction<Stats,Stats,Stats> statsFn = (x,y) -> {
             x.min = Math.min(x.min, y.min);
@@ -40,10 +47,9 @@ public class Main {
             return x;
         };
 
-        int nrec = 0;
-        int batchSize = 1000;
+        int batchSize = 10_000;
         var pool = Executors.newWorkStealingPool();
-        try(var reader = new BufferedReader(new FileReader("src/main/resources/measurements_100M.txt"))) {
+        try(var reader = new BufferedReader(new FileReader(args[0]))) {
 
             for (var line = reader.readLine(); line != null; line = reader.readLine()) {
                 // reading a few lines in a batch and parallelizing that batch
@@ -58,7 +64,7 @@ public class Main {
                 pool.submit(() -> update_stat_map(stringArr, map, statsFn));
             }
         } catch (Exception e) {
-            System.out.println(Arrays.stream(e.getStackTrace()).sequential());
+            System.out.println("Error while processing" + e.getMessage());
         }
 
         pool.close();
@@ -77,8 +83,8 @@ public class Main {
 
         System.out.println(System.currentTimeMillis() - mid);
         System.out.println(mid - start);
-        System.out.println(nrec);
         System.out.println(ans);
+        System.out.println(ans.size());
     }
 
     private static void update_stat_map(String[] line, Map<String, Stats> map, BiFunction<Stats, Stats, Stats> fn) {
